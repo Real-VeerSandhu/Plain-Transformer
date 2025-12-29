@@ -99,7 +99,7 @@ class Transformer(nn.Module):
         
         # Apply transformer blocks
         for block in self.blocks:
-            x = block(x, mask, use_kv_cache)
+            x = block(x, mask, use_kv_cache, start_pos)
         
         # Final layer norm and projection to vocab size
         x = self.ln_f(x)
@@ -156,8 +156,14 @@ class Transformer(nn.Module):
             if prompt_len + max_new_tokens > self.max_seq_len:
                 raise ValueError("prompt_len + max_new_tokens exceeds max_seq_len")
 
-            # Prefill: run the full prompt once to populate KV caches.
-            _logits, _loss = self(input_ids, use_kv_cache=True, start_pos=0)
+            # For very short sequences, KV cache might not be beneficial
+            # But we'll still use it for demonstration
+            if prompt_len > 1:
+                # Prefill: run the full prompt once to populate KV caches.
+                _logits, _loss = self(input_ids, use_kv_cache=True, start_pos=0)
+            else:
+                # For single token, no need to prefill
+                pass
 
             # Decode: feed exactly 1 new token per step so cache growth is correct.
             for step in range(max_new_tokens):

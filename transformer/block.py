@@ -37,6 +37,7 @@ class TransformerBlock(nn.Module):
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         use_kv_cache: bool = False,
+        start_pos: int = 0,
     ) -> torch.Tensor:
         """
         Args:
@@ -48,7 +49,7 @@ class TransformerBlock(nn.Module):
             Output tensor of shape (batch_size, seq_len, d_model)
         """
         # Self-attention with residual connection
-        attn_out = self.attn(self.ln1(x), mask, use_kv_cache)
+        attn_out = self.attn(self.ln1(x), mask, use_kv_cache, start_pos)
         x = x + attn_out
         
         # Feed-forward with residual connection

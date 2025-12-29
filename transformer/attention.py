@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple
 
+from .rope import apply_rope
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
@@ -28,6 +30,7 @@ class MultiHeadAttention(nn.Module):
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         use_kv_cache: bool = False,
+        start_pos: int = 0,
     ) -> torch.Tensor:
         """
         Args:
@@ -59,6 +62,10 @@ class MultiHeadAttention(nn.Module):
         Q = Q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
         K = K.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
         V = V.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        # Apply RoPE to Q and K
+        Q = apply_rope(Q, self.head_dim, start_pos)
+        K = apply_rope(K, self.head_dim, start_pos)
         
         # Scaled dot-product attention
         # Q, K, V shapes: (batch_size, num_heads, seq_len, head_dim)
