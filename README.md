@@ -1,6 +1,6 @@
-# Bare-Transformer
+# Plain-Transformer
 
-A bare-bones transformer implementation from scratch that demonstrates KV caching performance.
+A bare-bones transformer implementation with Python that demonstrates KV caching performance.
 
 ## Features
 
@@ -25,7 +25,7 @@ transformer/
 └── tokenizer.py    # Character-level tokenizer
 run.py              # Main execution script
 compare.py          # KV cache comparison
-bench.py             # Performance benchmarking
+bench.py            # Performance benchmarking
 ```
 
 ## Quick Start
@@ -74,7 +74,7 @@ python run.py --d_model 64 --num_layers 2 --no-kv-cache
 # Larger model, high temperature
 python run.py --d_model 256 --num_layers 4 --temperature 1.2
 
-# Custom prompt with verbose timing
+# Custom prompt with detailed timing
 python run.py --prompt "Hello world. Can you predict the next word by looking at the previous words?" --verbose
 
 # Benchmark comparison
