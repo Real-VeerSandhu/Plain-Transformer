@@ -1,3 +1,4 @@
+"""Main transformer model implementation."""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +7,8 @@ from typing import List, Optional, Tuple
 from .block import TransformerBlock, RMSNorm
 
 class Transformer(nn.Module):
+    """Decoder-only transformer with KV caching support."""
+    
     def __init__(
         self,
         vocab_size: int = 256,
@@ -49,6 +52,16 @@ class Transformer(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
     
+    def _init_weights(self, module):
+        """Initialize weights with normal distribution."""
+        for m in module.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, mean=0.0, std=0.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Embedding):
+                nn.init.normal_(m.weight, mean=0.0, std=0.02)
+    
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -85,13 +98,11 @@ class Transformer(nn.Module):
         x = tok_emb + pos_emb
         
         # Create causal mask for self-attention
-        # We need to create a mask where each position (i, j) is True if j <= i (causal)
         if seq_len > 1:
             # Create a lower triangular matrix of ones
             mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=device)
             mask = torch.tril(mask)  # Lower triangular mask
             
-            # Add batch dimension (but not head dimension yet, as it will be added in attention)
             # Shape: (1, seq_len, seq_len)
             mask = mask.unsqueeze(0)
         else:
@@ -101,7 +112,6 @@ class Transformer(nn.Module):
         for block in self.blocks:
             x = block(x, mask, use_kv_cache, start_pos)
         
-        # Final layer norm and projection to vocab size
         x = self.ln_f(x)
         logits = self.lm_head(x)  # (batch_size, seq_len, vocab_size)
         
@@ -111,7 +121,7 @@ class Transformer(nn.Module):
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
                 targets.view(-1),
-                ignore_index=-1  # ignore padding tokens if any
+                ignore_index=-1
             )
             
         return logits, loss
@@ -156,13 +166,10 @@ class Transformer(nn.Module):
             if prompt_len + max_new_tokens > self.max_seq_len:
                 raise ValueError("prompt_len + max_new_tokens exceeds max_seq_len")
 
-            # For very short sequences, KV cache might not be beneficial
-            # But we'll still use it for demonstration
             if prompt_len > 1:
                 # Prefill: run the full prompt once to populate KV caches.
                 _logits, _loss = self(input_ids, use_kv_cache=True, start_pos=0)
             else:
-                # For single token, no need to prefill
                 pass
 
             # Decode: feed exactly 1 new token per step so cache growth is correct.
@@ -186,7 +193,6 @@ class Transformer(nn.Module):
             # Get the relevant portion of the sequence
             seq_len = generated.size(1)
             if seq_len > self.max_seq_len:
-                # If sequence is too long, use the most recent tokens
                 context = generated[:, -self.max_seq_len:]
             else:
                 context = generated
@@ -202,13 +208,10 @@ class Transformer(nn.Module):
                 v, _ = torch.topk(logits, top_k)
                 logits[logits < v[:, [-1]]] = -float('Inf')
             
-            # Apply softmax to get probabilities
             probs = F.softmax(logits, dim=-1)
             
-            # Sample from the distribution
             next_token = torch.multinomial(probs, num_samples=1)
             
-            # Append the sampled token to the sequence
             generated = torch.cat([generated, next_token], dim=1)
         
         self.clear_cache()

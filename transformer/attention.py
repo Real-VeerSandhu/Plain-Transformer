@@ -1,3 +1,6 @@
+"""
+Multi-head self-attention with RoPE support.
+"""
 import math
 import torch
 import torch.nn as nn
@@ -7,6 +10,8 @@ from typing import Optional, Tuple
 from .rope import apply_rope
 
 class MultiHeadAttention(nn.Module):
+    """Multi-head self-attention with RoPE."""
+    
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
@@ -32,19 +37,11 @@ class MultiHeadAttention(nn.Module):
         use_kv_cache: bool = False,
         start_pos: int = 0,
     ) -> torch.Tensor:
-        """
-        Args:
-            x: Input tensor of shape (batch_size, seq_len, d_model)
-            mask: Optional mask tensor of shape (batch_size, seq_len, seq_len)
-            use_kv_cache: Whether to use KV caching
-            
-        Returns:
-            Output tensor of shape (batch_size, seq_len, d_model)
-        """
+        """Forward pass with optional KV caching."""
         batch_size, seq_len, _ = x.shape
         
         # Project queries, keys, and values
-        Q = self.Wq(x)  # (batch_size, seq_len, d_model)
+        Q = self.Wq(x)  # (batch_size, seq_len, dmodel)
         K = self.Wk(x)  # (batch_size, seq_len, d_model)
         V = self.Wv(x)  # (batch_size, seq_len, d_model)
         
@@ -102,11 +99,8 @@ class MultiHeadAttention(nn.Module):
         return self.Wo(output)  # (batch_size, seq_len, d_model)
     
     def clear_cache(self):
-        """Clear the KV cache"""
+        """Clear KV cache."""
         self.k_cache = None
         self.v_cache = None
 
 
-def create_causal_mask(seq_len: int, device: str = 'cpu') -> torch.Tensor:
-    """Create a causal mask for self-attention"""
-    return torch.tril(torch.ones(seq_len, seq_len, device=device)).view(1, 1, seq_len, seq_len)

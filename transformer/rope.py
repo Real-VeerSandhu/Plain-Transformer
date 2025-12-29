@@ -17,32 +17,25 @@ def apply_rope(x: torch.Tensor, head_dim: int, start_pos: int = 0) -> torch.Tens
     batch_size, num_heads, seq_len, _ = x.shape
     device = x.device
     
-    # Create position indices
     pos = torch.arange(start_pos, start_pos + seq_len, device=device, dtype=torch.float32)
     
-    # Compute the frequencies
     dim = head_dim
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, device=device).float() / dim))
     
-    # Compute frequency matrix
     freqs = torch.outer(pos, inv_freq)  # (seq_len, dim/2)
     
-    # Compute sin and cos
     sin = torch.sin(freqs)  # (seq_len, dim/2)
     cos = torch.cos(freqs)  # (seq_len, dim/2)
     
-    # Expand to match tensor dimensions
     sin = sin.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, dim/2)
     cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, dim/2)
     
-    # Apply RoPE
+    # RoPE
     x_rotated = torch.zeros_like(x)
     
-    # Split into real and imaginary parts
     x_real = x[..., :dim//2]
     x_imag = x[..., dim//2:]
     
-    # Apply rotation
     x_rotated[..., :dim//2] = x_real * cos - x_imag * sin
     x_rotated[..., dim//2:] = x_real * sin + x_imag * cos
     

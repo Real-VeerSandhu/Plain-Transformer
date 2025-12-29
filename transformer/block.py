@@ -1,12 +1,15 @@
+"""Transformer block with attention and feed-forward layers."""
 import torch
 import torch.nn as nn
 from typing import Optional
 
-from .attention import MultiHeadAttention, create_causal_mask
+from .attention import MultiHeadAttention
 from .ffn import FeedForward, SwiGLU
 
+
 class RMSNorm(nn.Module):
-    """Root Mean Square Layer Normalization"""
+    """Root Mean Square Layer Normalization."""
+    
     def __init__(self, d_model: int, eps: float = 1e-8):
         super().__init__()
         self.eps = eps
@@ -20,6 +23,8 @@ class RMSNorm(nn.Module):
 
 
 class TransformerBlock(nn.Module):
+    """Transformer block with attention and feed-forward layers."""
+    
     def __init__(self, d_model: int, num_heads: int, d_ff: int, use_swiglu: bool = False):
         super().__init__()
         self.ln1 = RMSNorm(d_model)
@@ -33,21 +38,12 @@ class TransformerBlock(nn.Module):
             self.ffn = FeedForward(d_model, d_ff)
             
     def forward(
-        self,
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         use_kv_cache: bool = False,
         start_pos: int = 0,
     ) -> torch.Tensor:
-        """
-        Args:
-            x: Input tensor of shape (batch_size, seq_len, d_model)
-            mask: Optional attention mask
-            use_kv_cache: Whether to use KV caching
-            
-        Returns:
-            Output tensor of shape (batch_size, seq_len, d_model)
-        """
+        """Forward pass with optional KV caching."""
         # Self-attention with residual connection
         attn_out = self.attn(self.ln1(x), mask, use_kv_cache, start_pos)
         x = x + attn_out
@@ -59,5 +55,5 @@ class TransformerBlock(nn.Module):
         return x
     
     def clear_cache(self):
-        """Clear the KV cache in the attention layer"""
+        """Clear KV cache in attention layer"""
         self.attn.clear_cache()

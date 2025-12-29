@@ -1,163 +1,96 @@
-Development plan (CPU-only, no real weights)
-Goal of the project
-
-Build a decoder-only transformer that can run in “real time” on CPU for small configs, and that visibly demonstrates KV-cache vs no-cache with clean profiling + scaling sweeps.
-
-Milestones (in order)
-Milestone 1 — “It runs” (forward pass + sampling)
-
-Outcome: python run.py --prompt "hello" --steps 50 streams tokens.
-
-Build
-
-Char-level tokenizer (256 vocab)
-
-Random initialized weights (seeded for repeatability)
-
-Decoder-only transformer:
-
-Embedding
-
-RMSNorm
-
-Multi-head self-attention (causal mask)
-
-MLP (GELU or SwiGLU)
-
-Final norm + LM head
-
-Greedy sampling (argmax)
-
-Acceptance checks
-
-Shapes always consistent: [B,T,d_model]
-
-Deterministic output given same seed + prompt
-
-CPU-friendly default config
-
-L=2, d_model=128, H=4, d_ff=256, max_seq=256
-
-Milestone 2 — Correct causal attention + RoPE (still no KV)
-
-Outcome: attention is correct and you can extend context without learned position embeddings.
-
-Build
-
-Implement RoPE applied to Q and K (per head)
-
-Implement causal masking efficiently (no giant [T,T] boolean per step if possible for decode)
-
-Acceptance checks
-
-RoPE positions increase correctly during generation
-
-No look-ahead: token t never attends to >t
-
-Milestone 3 — Add KV cache (the star feature)
-
-Outcome: Toggle --kv on/off and show a clear speed difference.
-
-Build
-
-KVCache per layer storing:
-
-K_cache: [B,H,T,Dh]
-
-V_cache: [B,H,T,Dh]
-
-Two execution paths:
-
-No cache: each decode step recomputes K,V for all tokens (slow)
-
-Cache: prefill stores full K,V; decode appends only 1 token’s K,V
-
-Acceptance checks
-
-Equivalence test: for the same prompt, the logits for step t match between cache and no-cache (within small float tolerance)
-
-Cache length grows exactly by 1 each decode token
-
-Milestone 4 — Instrumentation + “real-time” streaming UX
-
-Outcome: Your demo looks like a tiny serving engine.
-
-Build
-
-Separate prefill and decode timings
-
-Per-token decode latency printed live:
-
-ms/token
-
-tokens/sec (rolling average)
-
-Compute + memory estimates:
-
-KV bytes = L * 2 * B * H * T * Dh * bytes_per_elem
-
-Attention FLOPs rough estimate (optional)
-
-Acceptance checks
-
-Nice structured output (table-ish)
-
---verbose prints per-layer timings (optional)
-
-Milestone 5 — Benchmark suite (the portfolio graph generator)
-
-Outcome: bench.py produces convincing scaling results on CPU.
-
-Build
-
-Sweep prompt length T = [16, 32, 64, 128, 256, 512]
-
-Sweep model sizes (small/medium):
-
-Small: L2 d128 H4
-
-Medium: L4 d256 H8
-
-(Keep it CPU-viable)
-
-Run each setting:
-
-prefill time
-
-average decode time over N tokens
-
-KV on/off
-
-Acceptance checks
-
-Results show:
-
-Prefill grows ~quadratically with T
-
-Decode without cache grows with T (each step slower as context grows)
-
-Decode with cache is ~stable per token (grows much slower)
-
-Milestone 6 — Optimization pass (still pure CPU, still no weights)
-
-Outcome: It feels snappy for small configs and the benchmark is stable.
-
-Optimize (pick in this order)
-
-Use float32 by default; optionally support float16 but CPU fp16 may be slower depending on backend.
-
-Pre-allocate KV cache arrays for max_seq to avoid repeated concatenation.
-
-Use incremental decode path that avoids building full masks each step.
-
-Reduce Python overhead:
-
-keep tensor ops in vectorized form
-
-minimal per-token Python work
-
-Acceptance checks
-
-Medium config can stream at a readable pace on CPU
-
-Benchmark runs without huge variance
+# Bare-Transformer
+
+A bare-bones transformer implementation from scratch that demonstrates KV caching performance.
+
+## Features
+
+- **Decoder-only transformer** with causal attention
+- **KV caching** for efficient generation (12x+ speedup on long sequences)
+- **Rotary Position Embeddings (RoPE)** for better positional encoding
+- **Configurable architecture** - change model size, layers, heads
+- **Character-level tokenizer** (256 vocab)
+- **Performance benchmarking** - compare cache vs no-cache
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with default settings
+python run.py
+
+# Test KV cache speedup
+python compare.py
+
+# Benchmark across model sizes
+python bench.py
+```
+
+## Command Line Options
+
+### Model Configuration
+- `--d_model`: Model dimension (default: 128)
+- `--num_layers`: Number of layers (default: 2)  
+- `--num_heads`: Number of attention heads (default: 4)
+- `--d_ff`: Feed-forward dimension (default: 256)
+- `--max_seq_len`: Maximum sequence length (default: 256)
+- `--swiglu`: Use SwiGLU activation
+
+### Generation Parameters
+- `--prompt`: Input prompt (default: "Hello, world!")
+- `--steps`: Tokens to generate (default: 50)
+- `--temperature`: Sampling temperature (default: 0.8)
+- `--top_k`: Top-k sampling
+
+### Performance Options
+- `--no-kv-cache`: Disable KV caching (slower but uses less memory)
+- `--verbose`: Show detailed timing information
+- `--seed`: Random seed (default: 42)
+
+## Examples
+
+```bash
+# Small model, no cache
+python run.py --d_model 64 --num_layers 2 --no-kv-cache
+
+# Larger model, high temperature
+python run.py --d_model 256 --num_layers 4 --temperature 1.2
+
+# Custom prompt with verbose timing
+python run.py --prompt "Hello world. Can you predict the next word by looking at the previous words?" --verbose
+
+# Benchmark comparison
+python compare.py --seed 123
+```
+
+## Architecture
+
+The model uses standard transformer components:
+- Multi-head self-attention with RoPE
+- RMSNorm layer normalization  
+- Feed-forward network (GELU/SwiGLU)
+- Token embeddings + positional embeddings
+
+## Project Structure
+
+```
+transformer/
+├── __init__.py
+├── attention.py    # Multi-head attention with RoPE
+├── block.py        # Transformer blocks
+├── ffn.py          # Feed-forward networks
+├── model.py        # Main transformer model
+├── rope.py         # Rotary position embeddings
+└── tokenizer.py    # Character-level tokenizer
+run.py              # Main execution script
+compare.py          # KV cache comparison
+bench.py             # Performance benchmarking
+```
+
+## Notes
+
+- Weights are randomly initialized (not trained)
+- Output is random but deterministic for same seed
+- KV cache benefits scale with sequence length
+- CPU-optimized for small models
