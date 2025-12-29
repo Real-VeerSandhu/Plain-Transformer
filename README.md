@@ -11,6 +11,23 @@ A bare-bones transformer implementation from scratch that demonstrates KV cachin
 - **Character-level tokenizer** (256 vocab)
 - **Performance benchmarking** - compare cache vs no-cache
 
+
+## Project Structure
+
+```
+transformer/
+├── __init__.py
+├── attention.py    # Multi-head attention with RoPE
+├── block.py        # Transformer blocks
+├── ffn.py          # Feed-forward networks
+├── model.py        # Main transformer model
+├── rope.py         # Rotary position embeddings
+└── tokenizer.py    # Character-level tokenizer
+run.py              # Main execution script
+compare.py          # KV cache comparison
+bench.py             # Performance benchmarking
+```
+
 ## Quick Start
 
 ```bash
@@ -71,22 +88,6 @@ The model uses standard transformer components:
 - RMSNorm layer normalization  
 - Feed-forward network (GELU/SwiGLU)
 - Token embeddings + positional embeddings
-
-## Project Structure
-
-```
-transformer/
-├── __init__.py
-├── attention.py    # Multi-head attention with RoPE
-├── block.py        # Transformer blocks
-├── ffn.py          # Feed-forward networks
-├── model.py        # Main transformer model
-├── rope.py         # Rotary position embeddings
-└── tokenizer.py    # Character-level tokenizer
-run.py              # Main execution script
-compare.py          # KV cache comparison
-bench.py             # Performance benchmarking
-```
 
 ## Notes
 
