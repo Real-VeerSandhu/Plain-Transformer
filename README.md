@@ -1,6 +1,6 @@
 # Plain-Transformer
 
-A bare-bones transformer implementation with Python that demonstrates KV caching performance.
+A Transformer in PyTorch with causal attention, RoPE, and RMSNorm over a configurable architecture. Designed as a hands-on testbed for model internals, inference, and training dynamics.
 
 ## Features
 
