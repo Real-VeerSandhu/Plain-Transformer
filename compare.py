@@ -1,97 +1,87 @@
 #!/usr/bin/env python3
 """
-Compare KV cache vs no-cache performance side by side.
+KV cache vs no-cache speed comparison.
+
+Demonstrates the O(T) vs O(T²) decode complexity difference:
+  - Without cache: re-processes the entire growing context each step
+  - With cache: processes only the new token, reuses stored K/V projections
+
+Speedup scales with prompt length — longer prompts = bigger win.
 """
+import argparse
 import time
+
 import torch
-from transformer.model import Transformer
-from transformer.tokenizer import CharTokenizer
 
-PROMPT = "what is going on in the barn? I hope that the cows and such are okay. What are you doing? Are you a pig or a cow? How are you doing? I am an animal! What kind of animal are you? I am a human! I am a human! Yes I am!"
+from transformer import CharTokenizer, ModelConfig, Transformer
 
-def run_comparison(prompt=PROMPT * 1, steps=100, seed=42):
-    """Run comparison between KV cache and no-cache."""
-    
-    # Configuration
-    config = {
-        'd_model': 128,
-        'num_layers': 2,
-        'num_heads': 4,
-        'd_ff': 256,
-        'max_seq_len': 2560,
-        'use_swiglu': False,
-    }
-    
+PROMPT = (
+    "what is going on in the barn? I hope that the cows and such are okay. "
+    "What are you doing? Are you a pig or a cow? How are you doing? "
+    "I am an animal! What kind of animal are you? I am a human! Yes I am!"
+)
+
+
+def run_comparison(prompt: str, steps: int, seed: int, cfg: ModelConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = CharTokenizer()
-    
-    # Set random seed for reproducibility (or lack thereof)
     torch.manual_seed(seed)
-    
-    print(f"Device: {device}")
-    print(f"Random seed: {seed}")
-    print(f"Prompt: {prompt!r}")
-    print(f"Generating {steps} tokens")
-    print("=" * 80)
-    
-    # Test with KV cache
-    print("WITH KV CACHE:")
-    model_kv = Transformer(vocab_size=tokenizer.vocab_size, **config).to(device)
+
+    print(f"Device: {device} | seed: {seed}")
+    print(f"Prompt length: {len(prompt)} chars | generating {steps} tokens")
+    print("=" * 70)
+
     input_ids = torch.tensor([tokenizer.encode(prompt)], device=device)
-    
-    start_time = time.time()
+
+    # --- With KV cache ---
+    model_kv = Transformer(cfg).to(device)
+    t0 = time.time()
     with torch.no_grad():
-        output_kv = model_kv.generate(input_ids, steps, temperature=0.8, use_kv_cache=True)
-    kv_time = time.time() - start_time
-    
-    kv_text = tokenizer.decode(output_kv[0].tolist())
+        out_kv = model_kv.generate(input_ids, steps, temperature=0.8, use_kv_cache=True)
+    kv_time = time.time() - t0
     kv_tps = steps / kv_time
-    
-    print(f"  Time: {kv_time:.3f}s")
-    print(f"  Tokens/sec: {kv_tps:.1f}")
-    print(f"  Output: {kv_text[:50]}...")
-    
-    # Test without KV cache
-    print("\nWITHOUT KV CACHE:")
-    model_no_kv = Transformer(vocab_size=tokenizer.vocab_size, **config).to(device)
-    
-    start_time = time.time()
+    print(f"WITH cache:     {kv_time:.3f}s  |  {kv_tps:.1f} tok/s")
+    print(f"  Output: {tokenizer.decode(out_kv[0].tolist())[:60]}...")
+
+    # --- Without KV cache ---
+    model_no = Transformer(cfg).to(device)
+    t0 = time.time()
     with torch.no_grad():
-        output_no_kv = model_no_kv.generate(input_ids, steps, temperature=0.8, use_kv_cache=False)
-    no_kv_time = time.time() - start_time
-    
-    no_kv_text = tokenizer.decode(output_no_kv[0].tolist())
-    no_kv_tps = steps / no_kv_time
-    
-    print(f"  Time: {no_kv_time:.3f}s")
-    print(f"  Tokens/sec: {no_kv_tps:.1f}")
-    print(f"  Output: {no_kv_text[:50]}...")
-    
-    # Show speedup
-    speedup = kv_tps / no_kv_tps
-    print("\n" + "=" * 80)
-    print(f"SPEEDUP: {speedup:.2f}x faster with KV cache")
-    print(f"KV cache is {speedup:.1f}x faster")
-    
+        out_no = model_no.generate(input_ids, steps, temperature=0.8, use_kv_cache=False)
+    no_time = time.time() - t0
+    no_tps = steps / no_time
+    print(f"\nWITHOUT cache:  {no_time:.3f}s  |  {no_tps:.1f} tok/s")
+    print(f"  Output: {tokenizer.decode(out_no[0].tolist())[:60]}...")
+
+    speedup = kv_tps / no_tps
+    print(f"\nSpeedup: {speedup:.2f}x  (prompt_len={len(prompt)}, decode_steps={steps})")
     return speedup
 
+
+def main():
+    p = argparse.ArgumentParser(description="KV cache speed comparison",
+                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    p.add_argument("--prompt", type=str, default=PROMPT)
+    p.add_argument("--steps", type=int, default=80)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--d_model", type=int, default=128)
+    p.add_argument("--num_layers", type=int, default=4)
+    p.add_argument("--num_heads", type=int, default=4)
+    p.add_argument("--d_ff", type=int, default=512)
+    p.add_argument("--max_seq_len", type=int, default=2048)
+    args = p.parse_args()
+
+    cfg = ModelConfig(
+        d_model=args.d_model,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        d_ff=args.d_ff,
+        max_seq_len=args.max_seq_len,
+        use_swiglu=True,
+        dropout=0.0,
+    )
+    run_comparison(args.prompt, args.steps, args.seed, cfg)
+
+
 if __name__ == "__main__":
-    import random
-    
-    # Test with different seeds to show different random outputs
-    print("Testing different random seeds:")
-    print("-" * 40)
-    
-    # # Test with default seed
-    # run_comparison(seed=42)
-    
-    # print("\n" + "="*80 + "\n")
-    
-    # # Test with different seed
-    # run_comparison(seed=123)
-    
-    print("\n" + "="*80 + "\n")
-    
-    # Test with random seed
-    random_seed = random.randint(1, 10000)
-    run_comparison(seed=3)
+    main()
