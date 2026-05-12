@@ -1,29 +1,8 @@
-# live-transformer
+# Plain Transformer
 
-A decoder-only transformer built from scratch in PyTorch — designed as a lab for studying model internals and training dynamics.
+Plain Transformer is a decoder-only transformer language model implemented entirely from first principles in PyTorch. Every core component is hand-built, including causal self-attention, Rotary Positional Embeddings (RoPE), RMSNorm, SwiGLU feed-forward networks, KV caching, and a complete end-to-end training loop. This project exposes the underlying mechanics of modern language models so you can inspect, modify, and experiment with every part of the architecture.
 
-Engineered components: causal attention, RoPE positional encoding, RMSNorm, SwiGLU FFN, KV caching, and a configurable training loop.
-
----
-
-## Structure
-
-```
-transformer/
-├── config.py       # ModelConfig dataclass
-├── model.py        # Decoder-only transformer (weight-tied lm_head)
-├── attention.py    # Causal MHA with RoPE + KV cache + weight capture
-├── block.py        # Pre-norm transformer block (RMSNorm + residuals)
-├── ffn.py          # FeedForward (GELU) and SwiGLU
-├── rope.py         # Rotary Position Embeddings
-└── tokenizer.py    # Character-level tokenizer (256-vocab ASCII)
-
-run.py              # Generate text (random init or from checkpoint)
-train.py            # Full training loop with LR schedule + checkpoints
-lab.py              # Visualization lab: attention maps, RoPE, curves
-compare.py          # KV cache vs no-cache speed benchmark
-bench.py            # Multi-config throughput benchmarking
-```
+Train a character-level language model on real text and watch loss and perplexity converge, visualize attention maps to see what each head attends to at every layer, inspect RoPE frequency patterns and causal masking behavior, and benchmark KV caching against naive decoding. The codebase is designed for experimentation, making it easy to swap SwiGLU for GELU, adjust model depth and width, change the number of attention heads, and study how these architectural choices affect model behavior.
 
 ---
 
@@ -76,7 +55,7 @@ where θ = position × (1/10000^(2i/d)). Lower dimension indices rotate fast (sh
 
 ### Feed-forward
 
-**SwiGLU** (default): `W₃(SiLU(W₁x) ⊙ W₂x)` — gated activation used in LLaMA/PaLM.  
+**SwiGLU** (default): `W₃(SiLU(W₁x) ⊙ W₂x)`.
 **GELU** (fallback): standard two-layer MLP.
 
 ---
@@ -100,7 +79,8 @@ Logged per step: loss, perplexity, LR, gradient norm, throughput.
 
 ---
 
-## Lab (`lab.py`) — studying internals
+## Lab (`lab.py`)
+Study internals & play with parameters.
 
 ```bash
 # Causal mask structure
@@ -121,7 +101,7 @@ python lab.py --mode summary
 python lab.py --mode summary --d_model 256 --num_layers 6
 ```
 
-Outputs PNG files in the current directory.
+All plots are saved to `demo-plots/` by default. Override with `--out-dir path/` or `--out file.png`.
 
 ---
 
@@ -129,7 +109,7 @@ Outputs PNG files in the current directory.
 
 ```bash
 python compare.py                         # default 201-char prompt, 40 steps
-python compare.py --steps 100             # longer decode → bigger speedup
+python compare.py --steps 100             # longer decode == bigger speedup
 ```
 
 The speedup scales with prompt length because without caching each decode step reprocesses the full growing context (O(T²) attention) vs O(T) with cached K/V.
@@ -147,12 +127,3 @@ The speedup scales with prompt length because without caching each decode step r
 | `max_seq_len` | 512 | Maximum context length |
 | `use_swiglu` | True | SwiGLU vs GELU FFN |
 | `dropout` | 0.1 | Applied in attn and FFN (0.0 for inference) |
-
----
-
-## Notes
-
-- Weights are randomly initialized unless a checkpoint is loaded
-- Character-level tokenizer: 256-token ASCII vocab, no BPE
-- Weight tying: `token_embedding.weight == lm_head.weight`
-- No learned positional embeddings — RoPE handles all position information
